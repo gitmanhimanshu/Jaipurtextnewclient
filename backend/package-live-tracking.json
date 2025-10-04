@@ -1,0 +1,29 @@
+{
+  "name": "jaipur-taxi-live-tracking",
+  "version": "1.0.0",
+  "description": "Live vehicle tracking system for Jaipur Taxi using Socket.IO and OpenStreetMap",
+  "main": "live-tracking-server.js",
+  "scripts": {
+    "start": "node live-tracking-server.js",
+    "dev": "nodemon live-tracking-server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "live-tracking",
+    "gps",
+    "socket.io",
+    "openstreetmap",
+    "leaflet",
+    "taxi",
+    "jaipur"
+  ],
+  "author": "Jaipur Taxi Team",
+  "license": "MIT"
+}

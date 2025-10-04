@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Vehicle Tracking - Admin Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #e74c3c;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.connected {
+            background: #27ae60;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .main-content {
+            display: flex;
+            height: calc(100vh - 70px);
+        }
+        
+        .sidebar {
+            width: 350px;
+            background: white;
+            border-right: 1px solid #e1e5e9;
+            overflow-y: auto;
+        }
+        
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        
+        .sidebar-section {
+            padding: 20px;
+            border-bottom: 1px solid #e1e5e9;
+        }
+        
+        .sidebar-section h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .driver-card {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+        }
+        
+        .driver-card:hover {
+            background: #e9ecef;
+            cursor: pointer;
+        }
+        
+        .driver-card.active {
+            background: #d4edda;
+            border-color: #c3e6cb;
+        }
+        
+        .driver-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .driver-name {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .vehicle-id {
+            font-size: 12px;
+            color: #6c757d;
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        
+        .driver-location {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .driver-status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        
+        .status-online {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-offline {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .booking-card {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+        
+        .booking-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .booking-id {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .booking-status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        
+        .status-accepted {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .status-started {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+        
+        .no-data {
+            text-align: center;
+            color: #6c757d;
+            padding: 20px;
+            font-style: italic;
+        }
+        
+        .map-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: white;
+            border-radius: 8px;
+            padding: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .control-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        
+        .control-btn:hover {
+            background: #5a6fd8;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🗺️ Live Vehicle Tracking Dashboard</h1>
+        <div class="status-indicator">
+            <div class="status-dot" id="connectionStatus"></div>
+            <span id="connectionText">Connecting...</span>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="sidebar">
+            <div class="sidebar-section">
+                <h3>📊 Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalDrivers">0</div>
+                        <div class="stat-label">Active Drivers</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalBookings">0</div>
+                        <div class="stat-label">Active Bookings</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>🚗 Active Drivers</h3>
+                <div id="driversList">
+                    <div class="no-data">No drivers online</div>
+                </div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>📋 Active Bookings</h3>
+                <div id="bookingsList">
+                    <div class="no-data">No active bookings</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="map-container">
+            <div id="map"></div>
+            <div class="map-controls">
+                <button class="control-btn" onclick="centerOnJaipur()">📍 Jaipur</button>
+                <button class="control-btn" onclick="fitAllMarkers()">🔍 Fit All</button>
+                <button class="control-btn" onclick="toggleRealTime()">⏸️ Pause</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io("http://localhost:3001");
+        const map = L.map("map").setView([26.9124, 75.7873], 12); // Jaipur coordinates
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "© OpenStreetMap contributors"
+        }).addTo(map);
+        
+        // Store markers and data
+        const driverMarkers = new Map();
+        const bookingMarkers = new Map();
+        let isRealTimeEnabled = true;
+        let selectedDriver = null;
+        
+        // UI elements
+        const connectionStatus = document.getElementById("connectionStatus");
+        const connectionText = document.getElementById("connectionText");
+        const totalDrivers = document.getElementById("totalDrivers");
+        const totalBookings = document.getElementById("totalBookings");
+        const driversList = document.getElementById("driversList");
+        const bookingsList = document.getElementById("bookingsList");
+        
+        // Socket connection events
+        socket.on("connect", () => {
+            console.log("Connected to server");
+            connectionStatus.classList.add("connected");
+            connectionText.textContent = "Connected";
+            
+            // Join as admin
+            socket.emit("admin:join", {});
+        });
+        
+        socket.on("disconnect", () => {
+            console.log("Disconnected from server");
+            connectionStatus.classList.remove("connected");
+            connectionText.textContent = "Disconnected";
+        });
+        
+        // Receive dashboard data
+        socket.on("dashboard:data", (data) => {
+            console.log("Dashboard data received:", data);
+            updateDriversList(data.drivers);
+            updateBookingsList(data.bookings);
+        });
+        
+        // Receive live location updates
+        socket.on("location:live", (data) => {
+            if (!isRealTimeEnabled) return;
+            
+            console.log("Location update:", data);
+            updateDriverMarker(data);
+        });
+        
+        // Receive driver status updates
+        socket.on("driver:available", (data) => {
+            console.log("Driver available:", data);
+            addDriverToList(data);
+        });
+        
+        socket.on("driver:offline", (data) => {
+            console.log("Driver offline:", data);
+            removeDriverFromList(data.vehicle_id);
+            removeDriverMarker(data.vehicle_id);
+        });
+        
+        // Receive booking updates
+        socket.on("booking:accepted", (data) => {
+            console.log("Booking accepted:", data);
+            updateBookingStatus(data.booking_id, "accepted");
+        });
+        
+        socket.on("trip:started", (data) => {
+            console.log("Trip started:", data);
+            updateBookingStatus(data.booking_id, "started");
+        });
+        
+        socket.on("trip:completed", (data) => {
+            console.log("Trip completed:", data);
+            updateBookingStatus(data.booking_id, "completed");
+        });
+        
+        function updateDriverMarker(data) {
+            const { vehicle_id, lat, lon, driver_id, driver_name } = data;
+            
+            if (driverMarkers.has(vehicle_id)) {
+                // Update existing marker
+                const marker = driverMarkers.get(vehicle_id);
+                marker.setLatLng([lat, lon]);
+                marker.setPopupContent(`
+                    <strong>🚗 ${driver_name || 'Driver'}</strong><br>
+                    Vehicle: ${vehicle_id}<br>
+                    Driver: ${driver_id}<br>
+                    Location: ${lat.toFixed(6)}, ${lon.toFixed(6)}<br>
+                    Time: ${new Date().toLocaleTimeString()}
+                `);
+            } else {
+                // Create new marker
+                const marker = L.marker([lat, lon], {
+                    icon: L.divIcon({
+                        className: 'driver-marker',
+                        html: '<div style="background: #e74c3c; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 12px;">🚗</div>',
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    })
+                }).addTo(map);
+                
+                marker.bindPopup(`
+                    <strong>🚗 ${driver_name || 'Driver'}</strong><br>
+                    Vehicle: ${vehicle_id}<br>
+                    Driver: ${driver_id}<br>
+                    Location: ${lat.toFixed(6)}, ${lon.toFixed(6)}<br>
+                    Time: ${new Date().toLocaleTimeString()}
+                `);
+                
+                driverMarkers.set(vehicle_id, marker);
+            }
+            
+            // Update driver in list
+            updateDriverInList(vehicle_id, { lat, lon, driver_id, driver_name });
+        }
+        
+        function removeDriverMarker(vehicle_id) {
+            if (driverMarkers.has(vehicle_id)) {
+                map.removeLayer(driverMarkers.get(vehicle_id));
+                driverMarkers.delete(vehicle_id);
+            }
+        }
+        
+        function updateDriversList(drivers) {
+            if (drivers.length === 0) {
+                driversList.innerHTML = '<div class="no-data">No drivers online</div>';
+                return;
+            }
+            
+            driversList.innerHTML = '';
+            drivers.forEach(driver => {
+                addDriverToList(driver);
+            });
+        }
+        
+        function addDriverToList(driver) {
+            const driverCard = document.createElement('div');
+            driverCard.className = 'driver-card';
+            driverCard.dataset.vehicleId = driver.vehicle_id;
+            
+            driverCard.innerHTML = `
+                <div class="driver-info">
+                    <div>
+                        <div class="driver-name">${driver.driver_name || 'Unknown Driver'}</div>
+                        <div class="vehicle-id">${driver.vehicle_id}</div>
+                    </div>
+                    <div class="driver-status status-online">Online</div>
+                </div>
+                <div class="driver-location">
+                    📍 ${driver.lat ? driver.lat.toFixed(4) : '--'}, ${driver.lon ? driver.lon.toFixed(4) : '--'}
+                </div>
+            `;
+            
+            driverCard.addEventListener('click', () => {
+                selectDriver(driver.vehicle_id);
+            });
+            
+            driversList.appendChild(driverCard);
+        }
+        
+        function updateDriverInList(vehicle_id, data) {
+            const driverCard = driversList.querySelector(`[data-vehicle-id="${vehicle_id}"]`);
+            if (driverCard) {
+                const locationDiv = driverCard.querySelector('.driver-location');
+                if (locationDiv) {
+                    locationDiv.textContent = `📍 ${data.lat.toFixed(4)}, ${data.lon.toFixed(4)}`;
+                }
+            }
+        }
+        
+        function removeDriverFromList(vehicle_id) {
+            const driverCard = driversList.querySelector(`[data-vehicle-id="${vehicle_id}"]`);
+            if (driverCard) {
+                driverCard.remove();
+            }
+            
+            if (driversList.children.length === 0) {
+                driversList.innerHTML = '<div class="no-data">No drivers online</div>';
+            }
+        }
+        
+        function selectDriver(vehicle_id) {
+            // Remove previous selection
+            document.querySelectorAll('.driver-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            
+            // Select current driver
+            const driverCard = driversList.querySelector(`[data-vehicle-id="${vehicle_id}"]`);
+            if (driverCard) {
+                driverCard.classList.add('active');
+            }
+            
+            // Center map on driver
+            if (driverMarkers.has(vehicle_id)) {
+                const marker = driverMarkers.get(vehicle_id);
+                map.setView(marker.getLatLng(), 15);
+                marker.openPopup();
+            }
+            
+            selectedDriver = vehicle_id;
+        }
+        
+        function updateBookingsList(bookings) {
+            if (bookings.length === 0) {
+                bookingsList.innerHTML = '<div class="no-data">No active bookings</div>';
+                return;
+            }
+            
+            bookingsList.innerHTML = '';
+            bookings.forEach(booking => {
+                addBookingToList(booking);
+            });
+        }
+        
+        function addBookingToList(booking) {
+            const bookingCard = document.createElement('div');
+            bookingCard.className = 'booking-card';
+            bookingCard.dataset.bookingId = booking.booking_id;
+            
+            const statusClass = `status-${booking.status || 'pending'}`;
+            
+            bookingCard.innerHTML = `
+                <div class="booking-info">
+                    <div class="booking-id">${booking.booking_id}</div>
+                    <div class="booking-status ${statusClass}">${booking.status || 'Pending'}</div>
+                </div>
+                <div class="driver-location">
+                    Driver: ${booking.driver_id || 'Not assigned'}
+                </div>
+            `;
+            
+            bookingsList.appendChild(bookingCard);
+        }
+        
+        function updateBookingStatus(booking_id, status) {
+            const bookingCard = bookingsList.querySelector(`[data-booking-id="${booking_id}"]`);
+            if (bookingCard) {
+                const statusDiv = bookingCard.querySelector('.booking-status');
+                statusDiv.className = `booking-status status-${status}`;
+                statusDiv.textContent = status;
+            }
+        }
+        
+        function centerOnJaipur() {
+            map.setView([26.9124, 75.7873], 12);
+        }
+        
+        function fitAllMarkers() {
+            const group = new L.featureGroup();
+            driverMarkers.forEach(marker => {
+                group.addLayer(marker);
+            });
+            
+            if (group.getLayers().length > 0) {
+                map.fitBounds(group.getBounds().pad(0.1));
+            } else {
+                centerOnJaipur();
+            }
+        }
+        
+        function toggleRealTime() {
+            isRealTimeEnabled = !isRealTimeEnabled;
+            const btn = event.target;
+            btn.textContent = isRealTimeEnabled ? '⏸️ Pause' : '▶️ Resume';
+            btn.style.background = isRealTimeEnabled ? '#667eea' : '#e74c3c';
+        }
+        
+        // Update statistics
+        function updateStats() {
+            totalDrivers.textContent = driverMarkers.size;
+            totalBookings.textContent = bookingsList.children.length;
+        }
+        
+        // Update stats every 5 seconds
+        setInterval(updateStats, 5000);
+        
+        // Initialize
+        updateStats();
+    </script>
+</body>
+</html>

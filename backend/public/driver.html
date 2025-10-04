@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver GPS Sender - Jaipur Taxi</title>
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .status {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        
+        .status.warning {
+            background: #fff3cd;
+            border-color: #ffeaa7;
+            color: #856404;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #5a6fd8;
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .location-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        
+        .location-info h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .location-info p {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 Driver GPS</h1>
+            <p>Share your location for live tracking</p>
+        </div>
+        
+        <div id="status" class="status">
+            <div class="spinner"></div>
+            <p>Connecting to server...</p>
+        </div>
+        
+        <form id="driverForm">
+            <div class="form-group">
+                <label for="driverId">Driver ID</label>
+                <input type="text" id="driverId" placeholder="Enter your driver ID" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="driverName">Driver Name</label>
+                <input type="text" id="driverName" placeholder="Enter your name" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="vehicleId">Vehicle ID</label>
+                <input type="text" id="vehicleId" placeholder="Enter vehicle ID" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="bookingId">Booking ID (Optional)</label>
+                <input type="text" id="bookingId" placeholder="Enter booking ID if tracking specific trip">
+            </div>
+            
+            <button type="submit" class="btn" id="startBtn">
+                Start GPS Tracking
+            </button>
+        </form>
+        
+        <div id="locationInfo" class="location-info hidden">
+            <h3>📍 Current Location</h3>
+            <p id="coordinates">Latitude: --, Longitude: --</p>
+            <p id="accuracy">Accuracy: -- meters</p>
+            <p id="lastUpdate">Last Update: --</p>
+        </div>
+    </div>
+
+    <script>
+        const socket = io("http://localhost:3001");
+        const statusDiv = document.getElementById("status");
+        const locationInfo = document.getElementById("locationInfo");
+        const coordinates = document.getElementById("coordinates");
+        const accuracy = document.getElementById("accuracy");
+        const lastUpdate = document.getElementById("lastUpdate");
+        const startBtn = document.getElementById("startBtn");
+        const driverForm = document.getElementById("driverForm");
+        
+        let isTracking = false;
+        let watchId = null;
+        let driverData = {};
+        
+        // Socket connection events
+        socket.on("connect", () => {
+            updateStatus("Connected to server", "success");
+        });
+        
+        socket.on("disconnect", () => {
+            updateStatus("Disconnected from server", "error");
+            if (isTracking) {
+                stopTracking();
+            }
+        });
+        
+        // Form submission
+        driverForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            
+            if (isTracking) {
+                stopTracking();
+            } else {
+                startTracking();
+            }
+        });
+        
+        function startTracking() {
+            const driverId = document.getElementById("driverId").value;
+            const driverName = document.getElementById("driverName").value;
+            const vehicleId = document.getElementById("vehicleId").value;
+            const bookingId = document.getElementById("bookingId").value;
+            
+            if (!driverId || !driverName || !vehicleId) {
+                updateStatus("Please fill in all required fields", "error");
+                return;
+            }
+            
+            driverData = { driverId, driverName, vehicleId, bookingId };
+            
+            // Join as driver
+            socket.emit("driver:join", {
+                vehicle_id: vehicleId,
+                driver_id: driverId,
+                driver_name: driverName
+            });
+            
+            // Start GPS tracking
+            if ("geolocation" in navigator) {
+                updateStatus("Requesting GPS permission...", "warning");
+                
+                const options = {
+                    enableHighAccuracy: true,
+                    maximumAge: 1000,
+                    timeout: 10000
+                };
+                
+                watchId = navigator.geolocation.watchPosition(
+                    sendLocation,
+                    handleLocationError,
+                    options
+                );
+                
+                isTracking = true;
+                startBtn.textContent = "Stop GPS Tracking";
+                startBtn.style.background = "#dc3545";
+                locationInfo.classList.remove("hidden");
+                
+            } else {
+                updateStatus("Geolocation not supported by this browser", "error");
+            }
+        }
+        
+        function stopTracking() {
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            
+            isTracking = false;
+            startBtn.textContent = "Start GPS Tracking";
+            startBtn.style.background = "#667eea";
+            locationInfo.classList.add("hidden");
+            
+            updateStatus("GPS tracking stopped", "warning");
+        }
+        
+        function sendLocation(position) {
+            const data = {
+                vehicle_id: driverData.vehicleId,
+                driver_id: driverData.driverId,
+                lat: position.coords.latitude,
+                lon: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                ts: new Date().toISOString()
+            };
+            
+            if (driverData.bookingId) {
+                data.booking_id = driverData.bookingId;
+            }
+            
+            socket.emit("location:update", data);
+            
+            // Update UI
+            coordinates.textContent = `Latitude: ${data.lat.toFixed(6)}, Longitude: ${data.lon.toFixed(6)}`;
+            accuracy.textContent = `Accuracy: ${Math.round(data.accuracy)} meters`;
+            lastUpdate.textContent = `Last Update: ${new Date().toLocaleTimeString()}`;
+            
+            updateStatus(`Location sent: ${data.lat.toFixed(4)}, ${data.lon.toFixed(4)}`, "success");
+        }
+        
+        function handleLocationError(error) {
+            let message = "Unknown error occurred";
+            
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    message = "Location access denied by user";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = "Location information unavailable";
+                    break;
+                case error.TIMEOUT:
+                    message = "Location request timed out";
+                    break;
+            }
+            
+            updateStatus(`GPS Error: ${message}`, "error");
+            stopTracking();
+        }
+        
+        function updateStatus(message, type = "") {
+            statusDiv.innerHTML = `<p>${message}</p>`;
+            statusDiv.className = `status ${type}`;
+        }
+        
+        // Handle page visibility change
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden && isTracking) {
+                updateStatus("App is in background - GPS still tracking", "warning");
+            } else if (!document.hidden && isTracking) {
+                updateStatus("App is active - GPS tracking", "success");
+            }
+        });
+        
+        // Handle page unload
+        window.addEventListener("beforeunload", () => {
+            if (isTracking) {
+                stopTracking();
+            }
+        });
+    </script>
+</body>
+</html>
