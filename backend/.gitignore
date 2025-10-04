@@ -89,3 +89,7 @@ yarn-error.log
 # OS
 .DS_Store
 Thumbs.db
+
+# Build output (but keep in repo for deployment)
+# dist/
+# !dist/.gitkeep
