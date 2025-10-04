@@ -48,26 +48,61 @@ const PlaceBooking = () => {
   const [showLiveTracking, setShowLiveTracking] = useState(false);
   const [showDriverPanel, setShowDriverPanel] = useState(false);
   const [bookingId, setBookingId] = useState(null);
+  const [preselectedTour, setPreselectedTour] = useState(null);
 
   useEffect(() => {
     fetchItem();
     fetchPlaces();
   }, [type, id]);
 
-  // Close dropdowns when clicking outside
+  // Effect to handle tour preselection
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (!event.target.closest('.form-group')) {
-        setShowFromDropdown(false);
-        setShowToDropdown(false);
-      }
-    };
+    if (item && type === 'tour' && !preselectedTour) {
+      console.log('Auto-populating tour details for tour:', item);
+      setPreselectedTour(true);
+      // Automatically populate tour details
+      autoPopulateTourDetails(item);
+    }
+  }, [item, type, preselectedTour]);
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+  // Function to automatically populate tour details
+  const autoPopulateTourDetails = async (tour) => {
+    try {
+      console.log('Auto-populating tour details:', tour);
+      
+      // Find the "from" place
+      const fromResponse = await api.get(`/api/places/suggestions?q=${encodeURIComponent(tour.from)}`);
+      if (fromResponse.data && fromResponse.data.length > 0) {
+        const fromPlace = fromResponse.data[0];
+        console.log('Found from place:', fromPlace);
+        handleFromSelect(fromPlace);
+        
+        // Find the "to" place
+        const toResponse = await api.get(`/api/places/suggestions?q=${encodeURIComponent(tour.to)}`);
+        if (toResponse.data && toResponse.data.length > 0) {
+          const toPlace = toResponse.data[0];
+          console.log('Found to place:', toPlace);
+          
+          // Use setTimeout to ensure the from place is fully selected first
+          setTimeout(() => {
+            handleToSelect(toPlace);
+            
+            // Set route info based on tour data
+            setTimeout(() => {
+              setRouteInfo({
+                distance: tour.distance,
+                estimatedDuration: tour.duration.hours
+              });
+            }, 100);
+          }, 300);
+        }
+      } else {
+        console.log('Could not find places for tour route');
+      }
+    } catch (err) {
+      console.error('Error auto-populating tour details:', err);
+    }
+  };
 
   const fetchItem = async () => {
     try {
@@ -213,7 +248,8 @@ const PlaceBooking = () => {
     if (type === 'car') {
       return Math.round(item.pricePerKm * routeInfo.distance);
     } else {
-      return Math.round(routeInfo.distance * 15); // ₹15 per km for tours
+      // For tours, use the tour's distance and rate
+      return Math.round(item.distance * 15); // ₹15 per km for tours
     }
   };
 
@@ -412,7 +448,9 @@ const PlaceBooking = () => {
               )}
 
               {/* Route Information & Cost Calculation */}
-              {selectedFrom && selectedTo && routeInfo && (
+              {selectedFrom && selectedTo && (
+                routeInfo || (type === 'tour' && item)
+              ) && (
                 <div style={{ 
                   marginTop: '2rem', 
                   padding: '1.5rem', 
@@ -436,11 +474,15 @@ const PlaceBooking = () => {
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                       <span style={{ color: '#6b7280' }}>Distance:</span>
-                      <span style={{ fontWeight: '500', color: '#10b981' }}>{routeInfo.distance} km</span>
+                      <span style={{ fontWeight: '500', color: '#10b981' }}>
+                        {type === 'tour' && item ? item.distance : (routeInfo ? routeInfo.distance : 'N/A')} km
+                      </span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                       <span style={{ color: '#6b7280' }}>Duration:</span>
-                      <span style={{ fontWeight: '500', color: '#10b981' }}>{routeInfo.estimatedDuration} hours</span>
+                      <span style={{ fontWeight: '500', color: '#10b981' }}>
+                        {type === 'tour' && item ? item.duration.hours : (routeInfo ? routeInfo.estimatedDuration : 'N/A')} hours
+                      </span>
                     </div>
                   </div>
 
@@ -459,7 +501,9 @@ const PlaceBooking = () => {
                     
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                       <span style={{ color: '#6b7280' }}>Distance:</span>
-                      <span style={{ fontWeight: '500' }}>{routeInfo.distance} km</span>
+                      <span style={{ fontWeight: '500' }}>
+                        {type === 'tour' && item ? item.distance : (routeInfo ? routeInfo.distance : 'N/A')} km
+                      </span>
                     </div>
                     
                     <div style={{ 
@@ -534,6 +578,53 @@ const PlaceBooking = () => {
                   <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: 0 }}>
                     {availableDestinations.length} destinations available from {selectedFrom.name}
                   </p>
+                </div>
+              )}
+
+              {type === 'tour' && item && (
+                <div style={{ 
+                  marginTop: '1rem', 
+                  padding: '1rem', 
+                  backgroundColor: '#eff6ff', 
+                  borderRadius: '0.5rem', 
+                  border: '1px solid #dbeafe'
+                }}>
+                  <h4 style={{ marginBottom: '0.75rem', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <MapPin size={16} style={{ color: '#3b82f6' }} />
+                    Tour Information
+                  </h4>
+                  
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ color: '#6b7280' }}>Tour:</span>
+                      <span style={{ fontWeight: '500', color: '#374151' }}>{item.name}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ color: '#6b7280' }}>Route:</span>
+                      <span style={{ fontWeight: '500', color: '#374151' }}>{item.from} → {item.to}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ color: '#6b7280' }}>Distance:</span>
+                      <span style={{ fontWeight: '500', color: '#374151' }}>{item.distance} km</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ color: '#6b7280' }}>Duration:</span>
+                      <span style={{ fontWeight: '500', color: '#374151' }}>{item.duration.hours} hours</span>
+                    </div>
+                  </div>
+                  
+                  {item.highlights && item.highlights.length > 0 && (
+                    <div>
+                      <h5 style={{ marginBottom: '0.5rem', color: '#1f2937' }}>Tour Highlights:</h5>
+                      <ul style={{ paddingLeft: '1.5rem', margin: 0 }}>
+                        {item.highlights.map((highlight, index) => (
+                          <li key={index} style={{ color: '#6b7280', marginBottom: '0.25rem' }}>
+                            {highlight}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1084,7 +1175,7 @@ const PlaceBooking = () => {
                 </div>
 
                 {/* Estimated Cost Section */}
-                {routeInfo && (
+                {(routeInfo || (type === 'tour' && item)) && (
                   <div style={{ 
                     backgroundColor: '#f8fafc', 
                     padding: '1.5rem', 
@@ -1096,7 +1187,9 @@ const PlaceBooking = () => {
                     
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                       <span style={{ color: '#6b7280' }}>Estimated Distance:</span>
-                      <span style={{ fontWeight: '500', color: '#374151' }}>{routeInfo.distance} km</span>
+                      <span style={{ fontWeight: '500', color: '#374151' }}>
+                        {type === 'tour' && item ? item.distance : (routeInfo ? routeInfo.distance : 'N/A')} km
+                      </span>
                     </div>
                     
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>

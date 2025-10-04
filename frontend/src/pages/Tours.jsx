@@ -131,7 +131,7 @@ const Tours = () => {
                 className="btn btn-primary"
                 style={{ width: '100%' }}
               >
-                Book This Tour
+                Book This Tour - ₹{tour.distance * 15}
               </Link>
             </div>
           ))}
