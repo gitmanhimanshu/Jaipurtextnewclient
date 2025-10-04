@@ -1,6 +1,5 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import { resolve } from 'path'
 
 // Load environment variables
 export default defineConfig(({ mode }) => {
@@ -35,14 +34,14 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      outDir: '../backend/dist',
+      outDir: 'dist',
       emptyOutDir: true,
       rollupOptions: {
         output: {
           manualChunks: undefined,
-          entryFileNames: '[name].js',
-          chunkFileNames: '[name].js',
-          assetFileNames: '[name].[ext]'
+          entryFileNames: '[name].[hash].js',
+          chunkFileNames: '[name].[hash].js',
+          assetFileNames: '[name].[hash].[ext]'
         }
       }
     }
