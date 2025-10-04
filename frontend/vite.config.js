@@ -16,9 +16,26 @@ export default defineConfig(({ mode }) => {
           secure: false,
         },
       },
+      // Ensure proper MIME types for JavaScript files
+      mimeTypes: {
+        'js': 'text/javascript',
+        'jsx': 'text/javascript',
+        'mjs': 'text/javascript'
+      }
     },
     define: {
       'process.env.VITE_API_URL': JSON.stringify(env.VITE_API_URL || 'http://localhost:5000')
+    },
+    build: {
+      // Ensure proper MIME types in build
+      rollupOptions: {
+        output: {
+          manualChunks: undefined,
+          entryFileNames: '[name].js',
+          chunkFileNames: '[name].js',
+          assetFileNames: '[name].[ext]'
+        }
+      }
     }
   }
 })
